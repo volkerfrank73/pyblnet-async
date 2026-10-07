@@ -14,7 +14,13 @@ from .exceptions import (
     BLNETConnectionError,
 )
 from .models import BLNETData, DigitalCommand
-from .parser import is_access_denied, is_blnet_page, parse_analog, parse_digital
+from .parser import (
+    is_access_denied,
+    is_blnet_page,
+    parse_analog,
+    parse_digital,
+    parse_digital_inputs,
+)
 
 _PROBE_PATH = "/par.htm?blp=A1200101&1238653"
 _MAX_DIGITAL_ID = 15
@@ -69,6 +75,7 @@ class BLNETClient:
                 raise BLNETAuthError("BL-NET denied access")
         return BLNETData(
             analog=parse_analog(analog_page),
+            digital_inputs=parse_digital_inputs(analog_page),
             digital=parse_digital(digital_page),
         )
 

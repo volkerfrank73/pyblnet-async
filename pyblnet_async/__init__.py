@@ -11,6 +11,7 @@ from .models import (
     AnalogValue,
     BLNETData,
     DigitalCommand,
+    DigitalInput,
     DigitalMode,
     DigitalValue,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "BLNETData",
     "BLNETError",
     "DigitalCommand",
+    "DigitalInput",
     "DigitalMode",
     "DigitalValue",
 ]

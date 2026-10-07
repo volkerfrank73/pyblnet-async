@@ -36,7 +36,7 @@ asyncio.run(main())
 ```
 
 - `BLNETClient(host, session, *, password=None, port=80, node=None, timeout=10)`: `node` selects the CAN node, `None` keeps the node that is active on the device.
-- `async_fetch()` returns `BLNETData` with `analog` and `digital`, each a dict keyed by channel id.
+- `async_fetch()` returns `BLNETData` with `analog` (inputs with a value and unit), `digital_inputs` (read-only on/off inputs) and `digital` (switchable outputs with mode), each a dict keyed by channel id.
 - `async_set_digital(id, DigitalCommand.ON | OFF | AUTO)` for outputs 1 to 15.
 - Errors derive from `BLNETError`: `BLNETConnectionError`, `BLNETAuthError`, `BLNETCommandError`.
 
@@ -48,6 +48,7 @@ The BL-NET allows only one logged-in session. The client serializes its calls an
 - Typed result objects (floats, booleans, enums) instead of strings like `"EIN"`.
 - Distinct exceptions instead of a mix of `None`, `False` and `ValueError`.
 - No retry loops inside the library; callers decide how to retry.
+- Digital inputs (shown on the input page without a unit) are their own read-only category instead of being mixed into the outputs.
 - Dropped: direct TA port, `speed`/`power`/`energy` (the web interface never provided them).
 
 ## Development

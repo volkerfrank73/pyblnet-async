@@ -17,6 +17,8 @@ async def main(host: str) -> None:
         data = await client.async_fetch()
         for v in data.analog.values():
             print(f"analog  {v.id:>2} {v.name:<20} {v.value} {v.unit}")
+        for v in data.digital_inputs.values():
+            print(f"eingang {v.id:>2} {v.name:<20} {'EIN' if v.is_on else 'AUS'}")
         for v in data.digital.values():
             print(f"digital {v.id:>2} {v.name:<20} {v.mode.value}/{'EIN' if v.is_on else 'AUS'}")
 

@@ -32,6 +32,15 @@ class AnalogValue:
 
 
 @dataclass(frozen=True, slots=True)
+class DigitalInput:
+    """A digital input (read-only, e.g. a contact or a switched signal)."""
+
+    id: int
+    name: str
+    is_on: bool
+
+
+@dataclass(frozen=True, slots=True)
 class DigitalValue:
     """A digital output (pump, valve, ...)."""
 
@@ -46,4 +55,5 @@ class BLNETData:
     """Snapshot of one UVR node, keyed by channel id."""
 
     analog: dict[int, AnalogValue] = field(default_factory=dict)
+    digital_inputs: dict[int, DigitalInput] = field(default_factory=dict)
     digital: dict[int, DigitalValue] = field(default_factory=dict)

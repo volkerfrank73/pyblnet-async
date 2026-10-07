@@ -10,7 +10,7 @@ from __future__ import annotations
 import html
 import re
 
-from .models import AnalogValue, DigitalMode, DigitalValue
+from .models import AnalogValue, DigitalInput, DigitalMode, DigitalValue
 
 _TAG = re.compile(r"<[^>]+>")
 _BR = re.compile(r"<br\s*/?>", re.IGNORECASE)
@@ -21,6 +21,10 @@ _BODY = re.compile(r"<body.*", re.IGNORECASE | re.DOTALL)
 _ANALOG = re.compile(
     r"(?P<id>\d+):&nbsp;(?P<name>.+)\n(&nbsp;){3,6}"
     r"(?P<value>(-&nbsp;)?\d+,\d+) (?P<unit>.+?) &nbsp;&nbsp;PAR\?"
+)
+_DIGITAL_INPUT = re.compile(
+    r"(?P<id>\d+):&nbsp;(?P<name>.+)\n(&nbsp;)+"
+    r"(?P<value>AUS|EIN|OFF|ON)(&nbsp;)+PAR\?"
 )
 _DIGITAL = re.compile(
     r"(?P<id>\d+):&nbsp;(?P<name>.+)\n&nbsp;&nbsp;&nbsp;&nbsp;"
@@ -64,6 +68,19 @@ def parse_analog(page: str) -> dict[int, AnalogValue]:
             name=_clean(match["name"]),
             value=float(value),
             unit=_clean(match["unit"]),
+        )
+    return result
+
+
+def parse_digital_inputs(page: str) -> dict[int, DigitalInput]:
+    """Parse the digital inputs, which are listed on ``580500.htm`` between the analog ones."""
+    result: dict[int, DigitalInput] = {}
+    for match in _DIGITAL_INPUT.finditer(_text(page)):
+        channel = int(match["id"])
+        result[channel] = DigitalInput(
+            id=channel,
+            name=_clean(match["name"]),
+            is_on=match["value"] in ("EIN", "ON"),
         )
     return result
 
