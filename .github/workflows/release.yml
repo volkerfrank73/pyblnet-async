@@ -1,8 +1,10 @@
 name: Python package
+# Manual only: publishing to PyPI needs the PYPI_TOKEN secret and a decision to release.
 on:
-  push:
-    tags:
-      - "*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest

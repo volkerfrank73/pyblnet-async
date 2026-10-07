@@ -2,49 +2,23 @@ name: Build & Tests
 
 on:
   push:
-    branches: [ "**" ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ "**" ]
 
 jobs:
-
   build:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.12", "3.13", "3.14"]
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
-      run: |
-        pip install coverage coveralls pytest
-        pip install -e .
+      run: pip install -e '.[test]'
     - name: Run tests
-      run: coverage run --source=pyblnet -m pytest tests
-    - name: Coverage report
-      run: |
-        coverage report
-        coveralls
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        COVERALLS_FLAG_NAME: ${{ matrix.python-version }}
-        COVERALLS_PARALLEL: true
-
-
-  coveralls:
-      name: Indicate completion to coveralls.io
-      needs: build
-      runs-on: ubuntu-latest
-      container: python:3-slim
-      steps:
-      - name: Install coveralls
-        run: pip3 install --upgrade coveralls
-      - name: Finished
-        run: coveralls --finish
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: pytest tests
