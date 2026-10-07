@@ -1,70 +1,68 @@
-# PyBLNET - a very basic python BL-NET bridge
-![PyPI - Version](https://img.shields.io/pypi/v/pyblnet)
-![PyPI - Python Version](https://img.shields.io/pypi/pyversions/pyblnet)
-[![Build status](https://github.com/nielstron/pyblnet/actions/workflows/build.yml/badge.svg)](https://github.com/nielstron/pyblnet/actions/workflows/build.yml)
-[![Coverage Status](https://coveralls.io/repos/github/nielstron/pyblnet/badge.svg?branch=master)](https://coveralls.io/github/nielstron/pyblnet?branch=master)
+# pyblnet-async
 
-A package that connects to the BL-NET that is connected itself to a UVR1611 device by Technische Alternative. 
-It is able to read digital and analog values as well as to set switches to ON/OFF/AUTO.
+Async Python client for the Technische Alternative **BL-NET** (data logger / web interface of the UVR1611 controller).
 
-Documentation on the modules and their methods can be found with the methods and modules themselves.
+This is an `aiohttp`-based rewrite of [nielstron/pyblnet](https://github.com/nielstron/pyblnet) (MIT), built for use in a Home Assistant integration. It talks to the BL-NET web interface only; the PC-BLNET direct (TA) port is not supported.
 
-Two interfaces to BLNet exist and both are supported:
-- Webinterface  - Class BLnetWeb
-- BLNet-Direct protocol [1] - Class BLNETDirect
+## Installation
 
-However, as of now, there is no testing on the BLNet-Direct protocol *of any kind*, so enabling it is discouraged until the interface is fixed.
-Parsing the data via the web interface is the preferred way of accessing the BLNet for now.
-
-The class BLNET is a wrapper around the two classes. When initializing the class, the two interfaces can be activated/deactivated. 
-BLNetDirect provides 'analog', 'digital',  'speed', 'energy', 'power', whereas BLnetWeb supports 'analog' and 'digital' only.
-If both are active, BLNetDirect has priority.
-Setting switches and reading their manual/auto state is only possible via the BLNetWeb interface.
-
-### Usage
-
-```python
-from pyblnet import blnet_test, BLNET, BLNETWeb, BLNETDirect
-
-ip = '192.168.178.10'
-
-# Check if there is a blnet at given address
-blnet_test(ip)  # -> True/False
-
-# Convenient high level interface
-blnet = BLNET(ip, password='pass', timeout=5)
-
-# Control a switch by its ID
-blnet.turn_on(10)
-blnet.turn_auto(10)
-blnet.turn_off(10)
-
-# Fetch data (contains all available data using enabled interfaces)
-print(blnet.fetch())
-
-# The low level modules are also available
-# note that the direct use of these modules is discouraged though
-
-# Fetch the latest data via web interface
-# Note that manual log in and log out are required
-# when not using the with statement
-with BLNETWeb(ip, password='pass', timeout=5) as blnet_session:
-    print(blnet_session.read_analog_values())
-    print(blnet_session.read_digital_values())
-
-    # For publishing values
-    blnet_session.set_digital_value('10', 'AUS')
-    # Note that without explicit log out,
-    # the BLNET will block any further web access for the next 150s
-    # this is handled automatically when using the with statement
-
-# Fetch data via the Protocol developed by TA
-blnet = BLNETDirect(ip)
-# Fetching the latest data
-print(blnet.get_latest())
-# Still inofficial because unexplicably failing often
-print(blnet._get_data(1))
+```bash
+pip install git+https://github.com/volkerfrank73/pyblnet-async
 ```
 
+Requires Python 3.12 or newer and `aiohttp`.
 
-[1] https://www.haus-terra.at/heizung/download/Schnittstelle/Schnittstelle_PC_Bootloader.pdf
+## Usage
+
+```python
+import asyncio
+import aiohttp
+from pyblnet_async import BLNETClient, DigitalCommand
+
+async def main() -> None:
+    async with aiohttp.ClientSession() as session:
+        client = BLNETClient("192.168.0.250", session, password="...", node=None)
+        await client.async_test_connection()   # raises on failure
+
+        data = await client.async_fetch()
+        for sensor in data.analog.values():
+            print(sensor.name, sensor.value, sensor.unit)
+        for output in data.digital.values():
+            print(output.name, output.mode, output.is_on)
+
+        await client.async_set_digital(1, DigitalCommand.AUTO)
+
+asyncio.run(main())
+```
+
+- `BLNETClient(host, session, *, password=None, port=80, node=None, timeout=10)`: `node` selects the CAN node, `None` keeps the node that is active on the device.
+- `async_fetch()` returns `BLNETData` with `analog` and `digital`, each a dict keyed by channel id.
+- `async_set_digital(id, DigitalCommand.ON | OFF | AUTO)` for outputs 1 to 15.
+- Errors derive from `BLNETError`: `BLNETConnectionError`, `BLNETAuthError`, `BLNETCommandError`.
+
+The BL-NET allows only one logged-in session. The client serializes its calls and logs out after each one. While Home Assistant or another tool is polling, a second client may briefly get a login error and should retry later.
+
+## Differences to pyblnet
+
+- Async (`aiohttp`) instead of blocking `requests`; no `htmldom` dependency.
+- Typed result objects (floats, booleans, enums) instead of strings like `"EIN"`.
+- Distinct exceptions instead of a mix of `None`, `False` and `ValueError`.
+- No retry loops inside the library; callers decide how to retry.
+- Dropped: direct TA port, `speed`/`power`/`energy` (the web interface never provided them).
+
+## Development
+
+```bash
+python -m venv .venv && .venv/bin/pip install -e '.[test]'
+.venv/bin/pytest
+```
+
+Read-only check against a real device (the password comes from the environment and is never printed):
+
+```bash
+BLNET_PASSWORT=... PYTHONPATH=. .venv/bin/python tests/live_check.py 192.168.0.250
+```
+
+## License
+
+MIT, see `LICENSE.txt`. Original work by Niels Mündler (nielstron).
