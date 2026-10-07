@@ -23,6 +23,9 @@ from .parser import (
 )
 
 _PROBE_PATH = "/par.htm?blp=A1200101&1238653"
+# The BL-NET rejects the User-Agent that Home Assistant puts on its shared session,
+# so every request carries its own, which overrides the session default.
+_USER_AGENT = "pyblnet-async"
 _MAX_DIGITAL_ID = 15
 
 
@@ -108,12 +111,17 @@ class BLNETClient:
         payload = {"blu": 1, "blp": self._password, "bll": "Login"}
         try:
             async with self._session.post(
-                f"{self._base}/main.html", data=payload, timeout=self._timeout
+                f"{self._base}/main.html",
+                data=payload,
+                headers=self._headers(),
+                timeout=self._timeout,
             ) as resp:
                 self._taid = resp.headers.get("Set-Cookie", "")
         except (aiohttp.ClientError, TimeoutError) as err:
             raise BLNETConnectionError(f"Login request failed: {err}") from err
         if not await self._session_valid():
+            # The device allows one session only: do not leave a half-open one behind.
+            await self._log_out()
             raise BLNETAuthError("Login failed (wrong password or device busy)")
 
     async def _log_out(self) -> None:
@@ -139,7 +147,7 @@ class BLNETClient:
         try:
             async with self._session.get(
                 self._base + path,
-                headers={"Cookie": self._taid},
+                headers=self._headers(),
                 timeout=self._timeout,
             ) as resp:
                 await resp.read()
@@ -147,11 +155,17 @@ class BLNETClient:
         except (aiohttp.ClientError, TimeoutError) as err:
             raise BLNETConnectionError(f"Request to {path} failed: {err}") from err
 
+    def _headers(self) -> dict[str, str]:
+        headers = {"User-Agent": _USER_AGENT}
+        if self._taid:
+            headers["Cookie"] = self._taid
+        return headers
+
     async def _get(self, path: str) -> str:
         try:
             async with self._session.get(
                 self._base + path,
-                headers={"Cookie": self._taid},
+                headers=self._headers(),
                 timeout=self._timeout,
             ) as resp:
                 return (await resp.read()).decode("iso-8859-1")

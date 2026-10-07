@@ -4,7 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [ project ]
 name = "pyblnet-async"
-version = "0.1.0"
+version = "0.1.1"
 description = "Async client for the Technische Alternative BL-NET (UVR1611)"
 readme = "README.md"
 readme-content-type = "text/markdown"

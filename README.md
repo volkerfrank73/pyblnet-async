@@ -40,6 +40,8 @@ asyncio.run(main())
 - `async_set_digital(id, DigitalCommand.ON | OFF | AUTO)` for outputs 1 to 15.
 - Errors derive from `BLNETError`: `BLNETConnectionError`, `BLNETAuthError`, `BLNETCommandError`.
 
+The BL-NET refuses the `User-Agent` that Home Assistant sets on its shared session, so the client sends its own on every request.
+
 The BL-NET allows only one logged-in session. The client serializes its calls and logs out after each one. While Home Assistant or another tool is polling, a second client may briefly get a login error and should retry later.
 
 ## Differences to pyblnet

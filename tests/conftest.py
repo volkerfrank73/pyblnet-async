@@ -20,6 +20,7 @@ class FakeBLNET:
         self.logged_in = False
         self.requests: list[str] = []
         self.blocked = False
+        self.reject_cookie_on_pages = False
 
     def _page(self, name: str, headers: dict[str, str] | None = None) -> web.Response:
         body = FIXTURES.joinpath(name).read_bytes()
@@ -28,12 +29,19 @@ class FakeBLNET:
     def _authed(self, request: web.Request) -> bool:
         return self.logged_in and request.headers.get("Cookie") == COOKIE
 
+    @staticmethod
+    def _bad_agent(request: web.Request) -> bool:
+        """The real device refuses Home Assistant's User-Agent."""
+        return request.headers.get("User-Agent", "").startswith("HomeAssistant")
+
     async def root(self, request: web.Request) -> web.Response:
         self.requests.append(request.path_qs)
         return self._page("main.html")
 
     async def login(self, request: web.Request) -> web.Response:
         self.requests.append("POST " + request.path)
+        if self._bad_agent(request):
+            return web.Response(status=403)
         data = await request.post()
         if data.get("blp") != PASSWORD or self.logged_in or self.blocked:
             return web.Response(status=403)
@@ -42,11 +50,15 @@ class FakeBLNET:
 
     async def page(self, request: web.Request) -> web.Response:
         self.requests.append(request.path_qs)
+        if self._bad_agent(request):
+            return web.Response(status=403)
         if request.query_string == "blL=1":
             self.logged_in = False
             return web.Response(text="bye")
         if not self._authed(request):
             return web.Response(status=403)
+        if self.reject_cookie_on_pages:
+            return web.Response(text="ok")  # session not accepted: no Set-Cookie
         name = request.path.lstrip("/")
         if name in ("580500.htm", "580600.htm"):
             return self._page(name, {"Set-Cookie": COOKIE})

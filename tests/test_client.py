@@ -66,3 +66,23 @@ async def test_concurrent_calls_are_serialized(fake, session):
     c = client(fake, session)
     results = await asyncio.gather(c.async_fetch(), c.async_fetch())
     assert all(r.analog for r in results)
+
+
+async def test_overrides_home_assistant_user_agent(fake):
+    """HA puts its own User-Agent on the shared session; the BL-NET refuses it."""
+    import aiohttp
+
+    headers = {"User-Agent": "HomeAssistant/2026.9.4 aiohttp/3.14 Python/3.14"}
+    async with aiohttp.ClientSession(headers=headers) as ha_session:
+        data = await client(fake, ha_session).async_fetch()
+    assert data.analog
+
+
+async def test_failed_login_releases_the_device_session(fake, session):
+    """Login accepted but session not valid: must log out, or the device stays busy."""
+    fake.reject_cookie_on_pages = True
+    with pytest.raises(BLNETAuthError):
+        await client(fake, session).async_test_connection()
+    assert fake.logged_in is False
+    fake.reject_cookie_on_pages = False
+    await client(fake, session).async_test_connection()  # works again right away
