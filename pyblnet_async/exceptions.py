@@ -17,3 +17,7 @@ class BLNETAuthError(BLNETError):
 
 class BLNETCommandError(BLNETError):
     """A command was sent but the BL-NET did not accept it."""
+
+
+class BLNETUnsupportedError(BLNETError):
+    """The BL-NET answered, but in a mode or format this library does not support."""

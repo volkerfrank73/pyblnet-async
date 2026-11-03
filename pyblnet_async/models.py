@@ -57,3 +57,60 @@ class BLNETData:
     analog: dict[int, AnalogValue] = field(default_factory=dict)
     digital_inputs: dict[int, DigitalInput] = field(default_factory=dict)
     digital: dict[int, DigitalValue] = field(default_factory=dict)
+
+
+class InputKind(StrEnum):
+    """Sensor type of an input as encoded in the direct-port dataset."""
+
+    UNUSED = "unused"
+    DIGITAL = "digital"
+    TEMPERATURE = "temperature"
+    FLOW = "flow"
+    RADIATION = "radiation"
+    ROOM_TEMPERATURE = "room_temperature"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True, slots=True)
+class DirectInput:
+    """An input read over the direct port; the port carries no names."""
+
+    id: int
+    kind: InputKind
+    value: float | None
+    unit: str | None
+    raw: int
+
+    @property
+    def is_on(self) -> bool | None:
+        """State of a digital input, None for measured values.
+
+        Type "digital" carries the state in bit 15. A UVR1611 on CAN reports its
+        digital inputs with type bits 0 and the state in bit 0 (S2 on = 0x0001), which
+        looks the same as an unused input that is off; the caller has to know which
+        inputs are digital.
+        """
+        if self.kind is InputKind.DIGITAL:
+            return bool(self.raw & 0x8000)
+        if self.kind is InputKind.UNUSED:
+            return bool(self.raw & 0x0001)
+        return None
+
+
+@dataclass(frozen=True, slots=True)
+class HeatMeter:
+    """A heat meter (Wärmemengenzähler) of the UVR1611."""
+
+    id: int
+    active: bool
+    power: float  # kW
+    energy: float  # kWh
+
+
+@dataclass(frozen=True, slots=True)
+class DirectData:
+    """Current dataset read over the direct port, keyed by channel id."""
+
+    inputs: dict[int, DirectInput] = field(default_factory=dict)
+    outputs: dict[int, bool] = field(default_factory=dict)
+    heat_meters: dict[int, HeatMeter] = field(default_factory=dict)
