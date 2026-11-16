@@ -2,7 +2,7 @@
 
 Async Python client for the Technische Alternative **BL-NET** (data logger / web interface of the UVR1611 controller).
 
-This is an `aiohttp`-based rewrite of [nielstron/pyblnet](https://github.com/nielstron/pyblnet) (MIT), built for use in a Home Assistant integration. It reads the BL-NET web interface and, optionally, the current values over the direct port (TA port, PC-BLNET protocol).
+This is an `aiohttp`-based rewrite of [PyBLNET/pyblnet](https://github.com/PyBLNET/pyblnet) (MIT), built for use in a Home Assistant integration. It reads the BL-NET web interface and, optionally, the current values over the direct port (TA port, PC-BLNET protocol).
 
 ## Installation
 
