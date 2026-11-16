@@ -34,6 +34,7 @@ class FakeTAPort:
     def __init__(self) -> None:
         self.mode = b"\xdc"
         self.waits = 0
+        self.no_data = 0
         self.latest = LATEST
         self.commands: list[bytes] = []
         self.reset_ok = True
@@ -50,12 +51,17 @@ class FakeTAPort:
                 elif command == b"\xaa":
                     writer.write(HEADER)
                 elif command[:1] == b"\xab":
-                    if self.waits:
+                    if self.no_data:
+                        # no new dataset yet: one byte, the connection stays open
+                        self.no_data -= 1
+                        writer.write(b"\xab")
+                    elif self.waits:
                         self.waits -= 1
                         writer.write(_with_checksum(b"\xba\x00"))
                         await writer.drain()
                         break  # the device closes after asking for a pause
-                    writer.write(self.latest)
+                    else:
+                        writer.write(self.latest)
                 elif command == b"\xad":
                     writer.write(b"\xad")
                 elif command == b"\xaf":
@@ -109,6 +115,16 @@ def test_negative_temperature():
     assert parse_dataset(bytes(dataset)).inputs[1].value == -5.0
 
 
+def test_temperature_without_sensor():
+    # all value bits set (409.5 °C) means no sensor or a broken wire
+    dataset = bytearray(LATEST[1:56])
+    dataset[0:2] = struct.pack("<H", 0x2FFF)
+    item = parse_dataset(bytes(dataset)).inputs[1]
+    assert item.kind is InputKind.TEMPERATURE
+    assert item.value is None
+    assert item.unit == "°C"
+
+
 def test_inactive_heat_meter():
     dataset = bytearray(LATEST[1:56])
     dataset[38] = 0x01  # only meter 1 active
@@ -128,6 +144,21 @@ async def test_fetch_waits_when_asked(ta):
     data = await direct(ta).async_fetch()
     assert data.inputs[1].value == 12.1
     assert ta.commands.count(b"\xab\x01") == 3
+
+
+async def test_fetch_retries_while_no_new_data(ta, monkeypatch):
+    monkeypatch.setattr("pyblnet_async.direct._NO_DATA_WAIT", 0)
+    ta.no_data = 2
+    data = await direct(ta).async_fetch()
+    assert data.inputs[16].value == 112
+    assert ta.commands == [b"\x81", b"\xaa"] + [b"\xab\x01"] * 3 + [b"\xad"]
+
+
+async def test_fetch_gives_up_while_no_new_data(ta, monkeypatch):
+    monkeypatch.setattr("pyblnet_async.direct._NO_DATA_WAIT", 0)
+    ta.no_data = 99
+    with pytest.raises(BLNETConnectionError, match="no new data"):
+        await direct(ta, max_waits=2).async_fetch()
 
 
 async def test_fetch_gives_up_after_too_many_waits(ta):

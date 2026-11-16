@@ -25,8 +25,13 @@ _WAIT_TIME = 0xBA
 _MODES = {b"\xdc": "CAN", b"\xa8": "DL", b"\xd1": "DL2"}
 _HEADER_SIZE = 21  # upper bound, the BL-NET answers with fewer bytes
 _LATEST_SIZE = 57  # frame id, 55 byte dataset, checksum
+_WAIT_SIZE = 3  # 0xBA, seconds to wait, checksum
+_TEMP_NO_SENSOR = 0x2FFF  # temperature with all value bits set (409.5 °C): no sensor
 _DATASET = struct.Struct("<16HH4sBLHHLHH")
 _IDLE = 1.0  # an answer shorter than requested ends after this pause
+# Seconds to wait when the BL-NET has no new dataset yet; it answers GET_LATEST with
+# a single 0xAB for up to about 5 seconds after a read.
+_NO_DATA_WAIT = 2.0
 
 _KINDS = {
     0x0000: InputKind.UNUSED,
@@ -56,7 +61,9 @@ def _input(channel: int, raw: int) -> DirectInput:
     if kind is InputKind.DIGITAL:
         value = 1.0 if raw & 0x8000 else 0.0
     elif kind is InputKind.TEMPERATURE:
-        value, unit = round(_signed(raw, 0x0FFF, 0x8000) * 0.1, 1), "°C"
+        unit = "°C"
+        if raw != _TEMP_NO_SENSOR:
+            value = round(_signed(raw, 0x0FFF, 0x8000) * 0.1, 1)
     elif kind is InputKind.ROOM_TEMPERATURE:
         value, unit = round(_signed(raw, 0x01FF, 0x8000) * 0.1, 1), "°C"
     elif kind is InputKind.FLOW:
@@ -108,6 +115,31 @@ class _Connection:
             data += chunk
             wait = _IDLE
         return data
+
+    async def query_latest(self, command: bytes) -> bytes:
+        """Send GET_LATEST and read the complete reply, its length follows from the first byte.
+
+        Returns a single 0xAB (no new data), a wait reply or a dataset; a reply cut
+        short by the device is returned as far as it arrived.
+        """
+        self._writer.write(command)
+        await self._writer.drain()
+        first = await self._read_exactly(1)
+        if first[:1] == bytes([_GET_LATEST]):
+            return first
+        if first[:1] == bytes([_WAIT_TIME]):
+            return first + await self._read_exactly(_WAIT_SIZE - 1)
+        if not first:
+            return first
+        return first + await self._read_exactly(_LATEST_SIZE - 1)
+
+    async def _read_exactly(self, length: int) -> bytes:
+        try:
+            return await asyncio.wait_for(self._reader.readexactly(length), self._timeout)
+        except asyncio.IncompleteReadError as err:
+            return err.partial
+        except TimeoutError:
+            return b""
 
     async def close(self) -> None:
         self._writer.close()
@@ -163,14 +195,20 @@ class BLNETDirectClient:
                     )
                 command = bytes([_GET_LATEST, self._frame])
                 for _ in range(self._max_waits + 1):
-                    data = await conn.query(command, _LATEST_SIZE)
-                    if not (len(data) >= 3 and data[0] == _WAIT_TIME and _checksum_ok(data[:3])):
+                    data = await conn.query_latest(command)
+                    if data == bytes([_GET_LATEST]):
+                        # No new dataset yet; ask again on the same connection.
+                        await asyncio.sleep(_NO_DATA_WAIT)
+                    elif len(data) == _WAIT_SIZE and data[0] == _WAIT_TIME and _checksum_ok(data):
+                        # The BL-NET asks for a pause (seconds in data[1]) and expects a new connection.
+                        await conn.close()
+                        await asyncio.sleep(data[1])
+                        conn = await self._connect()
+                    else:
                         break
-                    # The BL-NET asks for a pause (seconds in data[1]) and expects a new connection.
-                    await conn.close()
-                    await asyncio.sleep(data[1])
-                    conn = await self._connect()
                 else:
+                    if data == bytes([_GET_LATEST]):
+                        raise BLNETConnectionError("BL-NET had no new data")
                     raise BLNETConnectionError("BL-NET kept asking to wait")
                 if len(data) < _LATEST_SIZE:
                     raise BLNETConnectionError(
